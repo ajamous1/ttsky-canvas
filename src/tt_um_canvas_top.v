@@ -62,7 +62,7 @@ module tt_um_canvas_top (
         // I2C slave pins
         .scl     (scl),
         .sda     (sda),
-        // (add any outputs you want to map to io_out here)
+        //outputs
         .status  (status_w)
     );
 
