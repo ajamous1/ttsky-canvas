@@ -12,16 +12,21 @@ module tt_um_canvas_top (
 );
 
     // I2C signals
-    wire sda = uio_in[0];
-    wire scl = uio_in[1];
+    wire sda = uio_in[2];
+    wire scl = uio_in[3];
 
     // Input signals (buttons and toggles)
-    wire [7:0] buttons = io_in;
-
-    // Unused outputs for now
-    assign io_out = 8'b0;
-    assign uio_out = 8'b0;
-    assign uio_oe  = 8'b0;
+    // Pushbuttons (momentary, active-low)
+    wire btn_up    = ~io_in[3];
+    wire btn_down  = ~io_in[2];
+    wire btn_left  = ~io_in[1];
+    wire btn_right = ~io_in[0];
+    
+    // Switches (persistent mode selectors)
+    wire sw_red    = io_in[6];
+    wire sw_green  = io_in[5];
+    wire sw_blue   = io_in[4];
+    wire sw_brush  = io_in[7];
 
     // Instantiate your main logic
     project u_project (
