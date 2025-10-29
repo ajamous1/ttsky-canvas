@@ -47,11 +47,12 @@ module tt_um_canvas_top (
     // -----------------------------
     // Tie off unused TT outputs/bidirs
     // -----------------------------
-    assign io_out  = 8'b0;   // or expose debug/status if desired
+    wire [7:0] status_w;
+    assign io_out  = status_w;   // or expose debug/status if desired
     assign uio_out = 8'b0;   // we never drive the bidir bus
     assign uio_oe  = 8'b0;   // keep as inputs (open-drain bus handled externally)
 
-     project u_project (
+     tt_um_canvas u_project (
         .clk     (clk),
         .rst_n   (rst_n),
         // controls
@@ -62,7 +63,7 @@ module tt_um_canvas_top (
         .scl     (scl),
         .sda     (sda),
         // (add any outputs you want to map to io_out here)
-        .status  (/* open or connect to io_out bits */)
+        .status  (status_w)
     );
 
 endmodule
