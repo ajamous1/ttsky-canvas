@@ -1,6 +1,6 @@
 `default_nettype none
 
-module tt_um_ahmadjamous_canvas_top (
+module tt_um_canvas_top (
     input  wire [7:0] io_in,     // from Pico (pushbuttons, RGB toggles)
     output wire [7:0] io_out,    // (unused or status/debug)
     input  wire [7:0] uio_in,    // bidirectional bus in (I2C)
