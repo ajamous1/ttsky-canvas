@@ -1,52 +1,51 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
-  language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  title:        "Tiny Canvas"     # Project title
+  author:       "Ahmad Jamous & Armita Bhatti"   
+  discord:      ""                # Optional
+  description:  "Mini MSPaint-style canvas: buttons and RGB switches select color/mode, exposed via status bus/I2C." 
+  language:     "Verilog"
+  clock_hz:     0                 # Set nonzero if you want to document the clock rate
 
   # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  tiles: "1x1"                    # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
-  # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_example"
+  # Top-level module for TinyTapeout
+  top_module:  "tt_um_canvas_top"
 
-  # List your project's source files here.
-  # Source files must be in ./src and you must list each source file separately, one per line.
-  # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
+  # List your project's source files here (all under ./src).
   source_files:
-    - "project.v"
+    - "tt_um_canvas.v"
+    - "tt_um_canvas_top.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
-# This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
+# This section is for the datasheet/website. Use descriptive names.
 pinout:
-  # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  # Inputs (io_in[7:0])
+  ui[0]: "BLUE_SW"
+  ui[1]: "GREEN_SW"
+  ui[2]: "RED_SW"
+  ui[3]: "LEFT_BTN"
+  ui[4]: "RIGHT_BTN"
+  ui[5]: "DOWN_BTN"
+  ui[6]: "UP_BTN"
+  ui[7]: "BRUSH_ERASER_SW"
 
-  # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  # Outputs (io_out[7:0] = status_w = {color_mix, buttons})
+  uo[0]: "LEFT_BTN_STATUS"
+  uo[1]: "RIGHT_BTN_STATUS"
+  uo[2]: "DOWN_BTN_STATUS"
+  uo[3]: "UP_BTN_STATUS"
+  uo[4]: "BLUE_STATUS"
+  uo[5]: "GREEN_STATUS"
+  uo[6]: "RED_STATUS"
+  uo[7]: ""   # currently unused / MSB
 
-  # Bidirectional pins
+  # Bidirectional pins (uio[7:0])
   uio[0]: ""
   uio[1]: ""
-  uio[2]: ""
-  uio[3]: ""
+  uio[2]: "I2C_SDA"
+  uio[3]: "I2C_SCL"
   uio[4]: ""
   uio[5]: ""
   uio[6]: ""
