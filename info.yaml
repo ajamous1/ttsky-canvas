@@ -15,7 +15,7 @@ project:
 
   # List your project's source files here (all under ./src).
   source_files:
-    - "tt_um_canvas.v"
+    - "project.v"
     - "tt_um_canvas_top.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
