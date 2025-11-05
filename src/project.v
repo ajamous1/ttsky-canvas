@@ -5,7 +5,7 @@
 // Core canvas module: takes decoded controls + I2C + clock/reset
 // and outputs an 8-bit status bus.
 // ---------------------------------------------------------------------
-module tt_um_canvas (
+module canvas_core (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -51,12 +51,18 @@ endmodule
 
 
 // ---------------------------------------------------------------------
-// TinyTapeout wrapper: connects TT harness IO to the core canvas module
+// TinyTapeout wrapper: this is the REQUIRED top-level for tt + tb.v
 // ---------------------------------------------------------------------
-module tt_um_canvas_top (
+module tt_um_canvas (
+    // Optional power pins for gate-level sims
+`ifdef GL_TEST
+    input  wire       VPWR,
+    input  wire       VGND,
+`endif
+
     // TT user IOs
     input  wire [7:0] ui_in,     // in[7:0]  from MCU
-    output wire [7:0] uo_out,    // out[7:0] to baseboard (unused -> 0)
+    output wire [7:0] uo_out,    // out[7:0] to baseboard
 
     // TT user bidir IOs (we use as inputs only for I2C slave)
     input  wire [7:0] uio_in,    // uio[7:0] inputs
@@ -96,17 +102,15 @@ module tt_um_canvas_top (
     wire [3:0] buttons = {btn_up, btn_down, btn_right, btn_left};
     wire [2:0] rgb_sel = {sw_red, sw_green, sw_blue};
 
-    // -----------------------------
-    // Tie off unused TT outputs/bidirs
-    // -----------------------------
     wire [7:0] status_w;
 
-    assign uo_out  = status_w;   // expose debug/status on user outputs
+    // For good TinyTapeout hygiene, gate outputs with ena
+    assign uo_out  = ena ? status_w : 8'h00;
     assign uio_out = 8'b0;       // we never drive the bidir bus
     assign uio_oe  = 8'b0;       // keep as inputs (open-drain bus handled externally)
 
     // Core canvas instance
-    tt_um_canvas u_project (
+    canvas_core u_core (
         .clk     (clk),
         .rst_n   (rst_n),
 
