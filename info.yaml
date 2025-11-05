@@ -11,7 +11,7 @@ project:
   tiles: "1x1"                    # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
 
   # Top-level module for TinyTapeout
-  top_module:  "tt_um_canvas_top"
+  top_module:  "tt_um_canvas"
 
   # List your project's source files here (all under ./src).
   source_files:
