@@ -52,6 +52,7 @@ async def test_rgb_combinations(dut):
         (1, 1, 1),  # White
     ]
 
+    # Test brush mode (brush=1)
     for (r, g, b) in combos:
         ui_val = make_ui_in(brush=True, r=r, g=g, b=b)
         dut.ui_in.value = ui_val
@@ -67,6 +68,30 @@ async def test_rgb_combinations(dut):
         )
         assert actual == expected_status, (
             f"RGB={r}{g}{b}: expected 0x{expected_status:02X}, got 0x{actual:02X}"
+        )
+
+    # Test eraser mode (brush=0) - color_mix should always be 0 regardless of RGB
+    dut._log.info("Testing eraser mode (brush=0) - color should always be 0")
+    eraser_combos = [
+        (1, 1, 1),  # White RGB switches, but eraser mode
+        (1, 0, 1),  # Magenta RGB switches, but eraser mode
+        (0, 1, 0),  # Green RGB switch, but eraser mode
+    ]
+    
+    for (r, g, b) in eraser_combos:
+        ui_val = make_ui_in(brush=False, r=r, g=g, b=b)
+        dut.ui_in.value = ui_val
+        await ClockCycles(dut.clk, 1)
+
+        # In eraser mode, color_mix should always be 0
+        expected_status = 0x00  # color_mix=0, buttons=0
+        actual = int(dut.uo_out.value)
+
+        dut._log.info(
+            f"Brush=0 (Eraser) RGB={r}{g}{b} → Expected status {expected_status:02X}, got {actual:02X}"
+        )
+        assert actual == expected_status, (
+            f"Eraser mode RGB={r}{g}{b}: expected 0x{expected_status:02X}, got 0x{actual:02X}"
         )
 
     
