@@ -78,21 +78,40 @@ This emulator replicates that behavior! Just move the cursor or change colors, a
 
 ### Keyboard Input Mode
 
-Press **`I`** to enter keyboard input mode, where you can type commands directly:
+Press **`I`** to enter keyboard input mode. Supports **two formats**:
 
-**Format:** `X Y STATUS`
+#### Format 1: Single Byte (STATUS)
+Apply status byte to current cursor position with movement/paint:
 
-**Examples:**
+```
+0x8C    # Up + Brush + Red (moves up and paints red)
+0x4A    # Down + Brush + Green (moves down and paints green)
+0x0F    # Brush + White (paints white, no movement)
+```
+
+**Status Byte [7:0]:**
+- `[7]` = Up button
+- `[6]` = Down button
+- `[5]` = Left button
+- `[4]` = Right button
+- `[3]` = Brush/Eraser (1=Brush, 0=Eraser)
+- `[2:0]` = RGB Color
+
+#### Format 2: Three Bytes (X Y STATUS)
+Paint at specific position directly:
+
 ```
 100 100 0x0C    # Red at (100, 100)
-128 128 0x0F    # White at center
+128 128 0x0F    # White at center (128, 128)
 50 200 0x0A     # Green at (50, 200)
 ```
 
-- Type your command and press **Enter** to execute
+**Features:**
+- Type command and press **Enter** to execute
 - Press **ESC** to cancel and return to normal mode
 - Supports both hex (0x0C) and decimal (12) formats
 - Real-time feedback shows success or errors
+- Automatically detects format (1 or 3 values)
 
 ## 🔌 External I2C Control
 

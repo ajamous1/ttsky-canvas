@@ -400,7 +400,7 @@ class CanvasEmulator:
                         # Enter keyboard input mode
                         self.canvas.keyboard_input_mode = True
                         self.canvas.keyboard_input_buffer = ""
-                        self.canvas.keyboard_command_status = "Type: 8-bit STATUS byte (e.g. 0x8C or 140)"
+                        self.canvas.keyboard_command_status = "1 byte: STATUS | 3 bytes: X Y STATUS"
                     elif event.key == pygame.K_r:
                         self.canvas.sw_red = not self.canvas.sw_red
                     elif event.key == pygame.K_g:
@@ -432,81 +432,128 @@ class CanvasEmulator:
         return True
     
     def process_keyboard_command(self):
-        """Parse and execute a keyboard command: single 8-bit status byte"""
+        """
+        Parse and execute a keyboard command.
+        Supports two formats:
+        1. Single byte: STATUS (applies to current position with movement)
+        2. Three bytes: X Y STATUS (paints at specific position)
+        """
         try:
-            # Parse the input (single byte)
-            input_str = self.canvas.keyboard_input_buffer.strip()
+            # Parse the input
+            parts = self.canvas.keyboard_input_buffer.strip().split()
             
-            # Handle hex (0x0C) or decimal (12)
-            if input_str.startswith('0x') or input_str.startswith('0X'):
-                status = int(input_str, 16)
-            else:
-                status = int(input_str)
-            
-            # Validate range
-            if not (0 <= status <= 255):
-                self.canvas.keyboard_command_status = "❌ Error: Value must be 0-255 (0x00-0xFF)"
-                return
-            
-            # Decode the status byte
-            btn_up = (status >> 7) & 1
-            btn_down = (status >> 6) & 1
-            btn_left = (status >> 5) & 1
-            btn_right = (status >> 4) & 1
-            brush = (status >> 3) & 1
-            color = status & 0b111
-            
-            # Update canvas state
-            self.canvas.btn_up = bool(btn_up)
-            self.canvas.btn_down = bool(btn_down)
-            self.canvas.btn_left = bool(btn_left)
-            self.canvas.btn_right = bool(btn_right)
-            self.canvas.sw_brush = bool(brush)
-            self.canvas.sw_red = bool((color >> 2) & 1)
-            self.canvas.sw_green = bool((color >> 1) & 1)
-            self.canvas.sw_blue = bool(color & 1)
-            
-            # Move cursor based on button states
-            import pygame
-            current_time = pygame.time.get_ticks()
-            if btn_up and self.canvas.cursor_y < self.canvas.grid_size - 1:
-                self.canvas.cursor_y += 1
-            elif btn_down and self.canvas.cursor_y > 0:
-                self.canvas.cursor_y -= 1
-            elif btn_left and self.canvas.cursor_x > 0:
-                self.canvas.cursor_x -= 1
-            elif btn_right and self.canvas.cursor_x < self.canvas.grid_size - 1:
-                self.canvas.cursor_x += 1
-            
-            # Paint at current position
-            canvas_y = self.canvas.get_canvas_y(self.canvas.cursor_y)
-            self.canvas.canvas[canvas_y][self.canvas.cursor_x] = self.canvas.get_color_mix()
-            
-            # Build status message
             color_names = {
                 0b000: "Black", 0b100: "Red", 0b010: "Green", 0b001: "Blue",
                 0b110: "Yellow", 0b101: "Magenta", 0b011: "Cyan", 0b111: "White",
             }
-            color_name = color_names.get(color, "Unknown")
             
-            buttons = []
-            if btn_up: buttons.append("Up")
-            if btn_down: buttons.append("Down")
-            if btn_left: buttons.append("Left")
-            if btn_right: buttons.append("Right")
-            btn_str = "+".join(buttons) if buttons else "None"
-            
-            mode = "Brush" if brush else "Eraser"
-            
-            self.canvas.keyboard_command_status = f"✅ 0x{status:02X}: {btn_str} | {mode} | {color_name} @ ({self.canvas.cursor_x},{self.canvas.cursor_y})"
+            if len(parts) == 1:
+                # Single byte mode: STATUS byte
+                # Decode and apply to current position
+                input_str = parts[0]
+                
+                # Handle hex (0x0C) or decimal (12)
+                if input_str.startswith('0x') or input_str.startswith('0X'):
+                    status = int(input_str, 16)
+                else:
+                    status = int(input_str)
+                
+                # Validate range
+                if not (0 <= status <= 255):
+                    self.canvas.keyboard_command_status = "❌ Error: Value must be 0-255 (0x00-0xFF)"
+                    return
+                
+                # Decode the status byte
+                btn_up = (status >> 7) & 1
+                btn_down = (status >> 6) & 1
+                btn_left = (status >> 5) & 1
+                btn_right = (status >> 4) & 1
+                brush = (status >> 3) & 1
+                color = status & 0b111
+                
+                # Update canvas state
+                self.canvas.btn_up = bool(btn_up)
+                self.canvas.btn_down = bool(btn_down)
+                self.canvas.btn_left = bool(btn_left)
+                self.canvas.btn_right = bool(btn_right)
+                self.canvas.sw_brush = bool(brush)
+                self.canvas.sw_red = bool((color >> 2) & 1)
+                self.canvas.sw_green = bool((color >> 1) & 1)
+                self.canvas.sw_blue = bool(color & 1)
+                
+                # Move cursor based on button states
+                if btn_up and self.canvas.cursor_y < self.canvas.grid_size - 1:
+                    self.canvas.cursor_y += 1
+                elif btn_down and self.canvas.cursor_y > 0:
+                    self.canvas.cursor_y -= 1
+                elif btn_left and self.canvas.cursor_x > 0:
+                    self.canvas.cursor_x -= 1
+                elif btn_right and self.canvas.cursor_x < self.canvas.grid_size - 1:
+                    self.canvas.cursor_x += 1
+                
+                # Paint at current position
+                canvas_y = self.canvas.get_canvas_y(self.canvas.cursor_y)
+                self.canvas.canvas[canvas_y][self.canvas.cursor_x] = self.canvas.get_color_mix()
+                
+                # Build status message
+                color_name = color_names.get(color, "Unknown")
+                buttons = []
+                if btn_up: buttons.append("Up")
+                if btn_down: buttons.append("Down")
+                if btn_left: buttons.append("Left")
+                if btn_right: buttons.append("Right")
+                btn_str = "+".join(buttons) if buttons else "None"
+                mode = "Brush" if brush else "Eraser"
+                
+                self.canvas.keyboard_command_status = f"✅ 0x{status:02X}: {btn_str} | {mode} | {color_name} @ ({self.canvas.cursor_x},{self.canvas.cursor_y})"
+                print(f"Keyboard: 0x{status:02X} [{btn_str}] [{mode}] [{color_name}] @ ({self.canvas.cursor_x},{self.canvas.cursor_y})")
+                
+            elif len(parts) == 3:
+                # Three byte mode: X Y STATUS
+                # Paint at specific position
+                
+                # Parse X, Y, and status
+                x = int(parts[0])
+                y = int(parts[1])
+                
+                # Handle hex (0x0C) or decimal (12) for status
+                if parts[2].startswith('0x') or parts[2].startswith('0X'):
+                    status = int(parts[2], 16)
+                else:
+                    status = int(parts[2])
+                
+                # Validate ranges
+                if not (0 <= x < self.canvas.grid_size):
+                    self.canvas.keyboard_command_status = f"❌ Error: X must be 0-{self.canvas.grid_size-1}"
+                    return
+                if not (0 <= y < self.canvas.grid_size):
+                    self.canvas.keyboard_command_status = f"❌ Error: Y must be 0-{self.canvas.grid_size-1}"
+                    return
+                if not (0 <= status <= 255):
+                    self.canvas.keyboard_command_status = "❌ Error: STATUS must be 0-255"
+                    return
+                
+                # Send via I2C (paints at specified position)
+                self.canvas.i2c_receive_byte(x)
+                self.canvas.i2c_receive_byte(y)
+                self.canvas.i2c_receive_byte(status)
+                
+                # Extract color for feedback
+                color = status & 0b111
+                color_name = color_names.get(color, "Unknown")
+                
+                self.canvas.keyboard_command_status = f"✅ Painted {color_name} at ({x}, {y}) [0x{status:02X}]"
+                print(f"Keyboard: X={x} Y={y} STATUS=0x{status:02X} [{color_name}]")
+                
+            else:
+                self.canvas.keyboard_command_status = "❌ Error: Enter 1 byte (STATUS) or 3 bytes (X Y STATUS)"
+                return
             
             # Store last command
             self.canvas.last_keyboard_command = self.canvas.keyboard_input_buffer
             
             # Clear buffer for next command
             self.canvas.keyboard_input_buffer = ""
-            
-            print(f"Keyboard input: 0x{status:02X} [{btn_str}] [{mode}] [{color_name}] @ ({self.canvas.cursor_x},{self.canvas.cursor_y})")
             
         except ValueError as e:
             self.canvas.keyboard_command_status = f"❌ Error: Invalid number format"
@@ -524,7 +571,7 @@ class CanvasEmulator:
         if not self.canvas.keyboard_input_mode:
             hint = self.font_small.render("Arrow Keys: Move | R/G/B: Colors | I: Input Mode | Space: Brush/Eraser | C: Clear | ESC: Quit", True, (150, 150, 150))
         else:
-            hint = self.font_small.render("KEYBOARD INPUT MODE - Type: 8-bit STATUS (0x00-0xFF) | Enter: Apply | ESC: Cancel", True, (255, 200, 100))
+            hint = self.font_small.render("INPUT MODE - 1 byte: STATUS | 3 bytes: X Y STATUS | Enter: Apply | ESC: Cancel", True, (255, 200, 100))
         hint_rect = hint.get_rect(center=(self.window_width // 2, 45))
         self.screen.blit(hint, hint_rect)
     
@@ -855,28 +902,34 @@ class CanvasEmulator:
         print("Controls:")
         print("  Arrow Keys: Move cursor (triggers I2C automatically)")
         print("  R/G/B: Toggle Red/Green/Blue (triggers I2C)")
-        print("  I: Keyboard Input Mode (type 8-bit status byte)")
+        print("  I: Keyboard Input Mode (type commands)")
         print("  Space: Toggle Brush/Eraser")
         print("  C: Clear canvas")
         print("  ESC/Q: Quit")
         print("=" * 60)
-        print("\nKEYBOARD INPUT MODE:")
-        print("  Press 'I' to enter input mode")
-        print("  Type: 8-bit STATUS byte (0x00-0xFF or 0-255)")
-        print("  Press Enter to apply, ESC to cancel")
+        print("\nKEYBOARD INPUT MODE (Press 'I'):")
         print()
-        print("  Status Byte Format:")
-        print("    Bit [7]:   Up button")
-        print("    Bit [6]:   Down button")
-        print("    Bit [5]:   Left button")
-        print("    Bit [4]:   Right button")
-        print("    Bit [3]:   Brush/Eraser (1=Brush)")
-        print("    Bits [2:0]: RGB Color")
+        print("  TWO INPUT FORMATS:")
         print()
-        print("  Examples:")
-        print("    0x8C (10001100) = Up + Brush + Red")
-        print("    0x4A (01001010) = Down + Brush + Green")
-        print("    0x0F (00001111) = Brush + White (no movement)")
+        print("  1) Single Byte - STATUS byte (moves cursor from current position)")
+        print("     Format: STATUS")
+        print("     Example: 0x8C")
+        print("              -> 10001100 = Up + Brush + Red")
+        print()
+        print("     Status Byte [7:0]:")
+        print("       [7]   = Up button")
+        print("       [6]   = Down button")
+        print("       [5]   = Left button")
+        print("       [4]   = Right button")
+        print("       [3]   = Brush/Eraser (1=Brush)")
+        print("       [2:0] = RGB Color")
+        print()
+        print("  2) Three Bytes - X Y STATUS (paint at specific position)")
+        print("     Format: X Y STATUS")
+        print("     Examples:")
+        print("       100 100 0x0C  → Red at (100, 100)")
+        print("       128 128 0x0F  → White at center")
+        print("       255 255 0x0E  → Yellow at top-right")
         print("=" * 60)
         
         while running:
