@@ -1,0 +1,99 @@
+╔═══════════════════════════════════════════════════════════════╗
+║          EXTERNAL I2C CONTROL - QUICK REFERENCE              ║
+╚═══════════════════════════════════════════════════════════════╝
+
+OVERVIEW
+--------
+The canvas emulator can receive I2C commands from external scripts.
+This allows you to programmatically control the canvas!
+
+HOW IT WORKS
+------------
+1. Emulator monitors file: i2c_commands.txt
+2. External scripts write commands to this file
+3. Emulator reads and processes commands in real-time
+4. Pixels are painted on the canvas
+
+COMMAND FORMAT
+--------------
+Each line in i2c_commands.txt:
+  x,y,status
+
+Where:
+  x      = X coordinate (0-255)
+  y      = Y coordinate (0-255)
+  status = Status byte with color in bits [6:4]
+
+COLOR CODES (STATUS BYTE)
+--------------------------
+0x00 = Black   (000)
+0x40 = Red     (100)
+0x20 = Green   (010)
+0x10 = Blue    (001)
+0x60 = Yellow  (110)
+0x50 = Magenta (101)
+0x30 = Cyan    (011)
+0x70 = White   (111)
+
+USAGE
+-----
+
+1. Start the emulator:
+   $ python test/canvas_emulator.py
+
+2. Send commands from another terminal:
+   
+   # Single command
+   $ python test/send_i2c.py 100 100 0x40
+   
+   # Interactive mode
+   $ python test/send_i2c.py
+   > 100 100 0x40
+   > 50 75 0x60
+   > quit
+
+3. Run example patterns:
+   $ python test/example_draw.py
+
+EXAMPLES
+--------
+
+# Red pixel at (100, 100)
+python test/send_i2c.py 100 100 0x40
+
+# Yellow pixel at (50, 75)  
+python test/send_i2c.py 50 75 0x60
+
+# White pixel at center
+python test/send_i2c.py 128 128 0x70
+
+SCRIPTING
+---------
+
+Create your own Python scripts:
+
+```python
+def send_command(x, y, color):
+    with open("i2c_commands.txt", 'a') as f:
+        f.write(f"{x},{y},{color}\n")
+
+# Draw a line
+for x in range(50, 100):
+    send_command(x, 100, 0x40)
+```
+
+TIPS
+----
+• Start emulator BEFORE running external scripts
+• Commands are processed in order
+• File is monitored continuously
+• Check sidebar for "External I2C: Active" status
+• Clear i2c_commands.txt between runs if needed
+
+EXAMPLES PROVIDED
+-----------------
+• send_i2c.py    - Manual command sender
+• example_draw.py - Pattern drawer (rainbow, smiley, etc.)
+
+═══════════════════════════════════════════════════════════════
+
