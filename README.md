@@ -11,8 +11,8 @@ Tiny Canvas is a simplified MS Paint-style drawing system implemented in Verilog
 - **256×256 pixel canvas** - High resolution drawing surface
 - **8-color mixing** - RGB color combinations (Red, Green, Blue, Yellow, Magenta, Cyan, White, Black)
 - **I2C communication** - 3-byte protocol for hardware control
-- **Interactive emulator** - Fullscreen pygame visualization tool
-- **Coordinate system** - (0,0) at top-left, (255,255) at bottom-right
+- **Interactive emulator** - Resizable pygame visualization tool
+- **Coordinate system** - (0,0) at **bottom-left**, (255,255) at **top-right**
 
 ## 🖥️ Canvas Emulator
 
@@ -47,7 +47,10 @@ The emulator simulates **real hardware I2C behavior** - I2C communication is **a
 2. **Automatic Transmission**: When state changes, automatically sends 3 bytes over I2C:
    - Byte 1: X coordinate (0-255)
    - Byte 2: Y coordinate (0-255)
-   - Byte 3: Status byte (color in bits [6:4])
+   - Byte 3: Status byte [7:0]:
+     - [7:4] = Buttons (Up/Down/Left/Right)
+     - [3] = Brush/Eraser (1=Brush, 0=Eraser)
+     - [2:0] = RGB Color (Red/Green/Blue)
 3. **Buffer Reception**: Bytes accumulate in I2C buffer (watch it fill: 0/3 → 1/3 → 2/3 → 3/3)
 4. **Canvas Update**: When 3 bytes received, pixel is painted at (X, Y) with specified color
 
@@ -68,13 +71,58 @@ This emulator replicates that behavior! Just move the cursor or change colors, a
 | R | Toggle Red | ✅ Yes (auto) |
 | G | Toggle Green | ✅ Yes (auto) |
 | B | Toggle Blue | ✅ Yes (auto) |
+| I | **Keyboard Input Mode** - Type commands directly | ✅ Yes |
 | Space | Toggle Brush/Eraser mode | ✅ Yes (auto) |
 | C | Clear canvas | ❌ No |
 | ESC/Q | Quit | ❌ No |
 
+### Keyboard Input Mode
+
+Press **`I`** to enter keyboard input mode, where you can type commands directly:
+
+**Format:** `X Y STATUS`
+
+**Examples:**
+```
+100 100 0x0C    # Red at (100, 100)
+128 128 0x0F    # White at center
+50 200 0x0A     # Green at (50, 200)
+```
+
+- Type your command and press **Enter** to execute
+- Press **ESC** to cancel and return to normal mode
+- Supports both hex (0x0C) and decimal (12) formats
+- Real-time feedback shows success or errors
+
 ## 🔌 External I2C Control
 
 The emulator can also receive I2C commands from external scripts, allowing you to programmatically control the canvas!
+
+### Status Byte Format
+
+The status byte matches the hardware pinout exactly:
+
+```
+Bit [7]: Up button (0 or 1)
+Bit [6]: Down button (0 or 1)
+Bit [5]: Left button (0 or 1)
+Bit [4]: Right button (0 or 1)
+Bit [3]: Brush/Eraser (1=Brush, 0=Eraser)
+Bits [2:0]: RGB Color
+  [2] = Red
+  [1] = Green
+  [0] = Blue
+
+Common Colors (with Brush bit set):
+  0x08 = Black  (0b00001000)
+  0x0C = Red    (0b00001100)
+  0x0A = Green  (0b00001010)
+  0x09 = Blue   (0b00001001)
+  0x0E = Yellow (0b00001110)
+  0x0D = Magenta(0b00001101)
+  0x0B = Cyan   (0b00001011)
+  0x0F = White  (0b00001111)
+```
 
 ### Sending Commands Manually
 
@@ -82,12 +130,12 @@ Use the `send_i2c.py` script to send individual commands:
 
 ```bash
 # Send a single command (while emulator is running)
-python test/send_i2c.py 100 100 0x40  # Paint red at (100, 100)
+python test/send_i2c.py 100 100 0x0C  # Paint red at (100, 100)
 
 # Or run interactively
 python test/send_i2c.py
-> 100 100 0x40
-> 50 75 0x60
+> 100 100 0x0C
+> 50 75 0x0E
 ```
 
 ### Drawing Patterns Programmatically
@@ -117,7 +165,7 @@ def send_command(x, y, color):
 
 # Draw a red horizontal line
 for x in range(50, 100):
-    send_command(x, 100, 0x40)  # 0x40 = Red
+    send_command(x, 100, 0x0C)  # 0x0C = Red (Brush + Red bit)
 ```
 
 The emulator continuously monitors `i2c_commands.txt` and processes new commands in real-time!
@@ -151,7 +199,7 @@ class MyTestbench:
     def test_my_pattern(self):
         # Your test code here
         for i in range(100):
-            self.send_i2c(i, 100, 0x40)  # Red line
+            self.send_i2c(i, 100, 0x0C)  # Red line (Brush + Red)
             time.sleep(0.01)  # Watch it draw in real-time!
 ```
 
@@ -164,8 +212,8 @@ Watch the emulator's sidebar for:
 
 The emulator simulates I2C communication with a 3-byte protocol:
 
-- **Byte 1**: X coordinate (0-255)
-- **Byte 2**: Y coordinate (0-255)  
+- **Byte 1**: X coordinate (0-255, left to right)
+- **Byte 2**: Y coordinate (0-255, **0 = bottom**, 255 = top)  
 - **Byte 3**: Status byte (color in bits [6:4])
 
 ### Example Usage
@@ -174,15 +222,15 @@ The emulator simulates I2C communication with a 3-byte protocol:
 1. Press **R** and **G** to select Yellow (110)
 2. Press **RIGHT arrow** to move cursor right
 3. Watch what happens:
-   - Cursor moves from (128, 128) to (129, 128)
-   - I2C automatically sends: [0x81, 0x80, 0x60]
+   - Cursor moves from (0, 0) to (1, 0)
+   - I2C automatically sends: [0x01, 0x00, 0x60]
    - Buffer fills: 0/3 → 1/3 → 2/3 → 3/3
-   - Yellow pixel painted at (129, 128)!
+   - Yellow pixel painted at (1, 0) - bottom row!
 
 **Change Color Mid-Draw:**
-1. Already at position (129, 128)
+1. Already at position (1, 0)
 2. Press **B** to add Blue (now Yellow+Blue = White)
-3. I2C automatically sends: [0x81, 0x80, 0x70]
+3. I2C automatically sends: [0x01, 0x00, 0x70]
 4. White pixel painted at same position!
 
 **Watch the Sidebar:**

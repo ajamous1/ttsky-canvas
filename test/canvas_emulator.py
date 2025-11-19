@@ -49,9 +49,9 @@ class TinyCanvas:
         self.grid_size = 256
         self.canvas = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
         
-        # Cursor position
-        self.cursor_x = 128
-        self.cursor_y = 128
+        # Cursor position (start at bottom-left)
+        self.cursor_x = 0
+        self.cursor_y = 0
         
         # For handling button press timing
         self.last_move_time = 0
@@ -71,6 +71,12 @@ class TinyCanvas:
         self.external_commands_received = 0  # Count of external commands
         self.last_external_command_time = 0  # Time of last external command
         
+        # Keyboard input mode
+        self.keyboard_input_mode = False
+        self.keyboard_input_buffer = ""
+        self.last_keyboard_command = ""
+        self.keyboard_command_status = ""  # Success/error message
+        
     def get_color_mix(self):
         """Implements the color mixing logic from canvas_core module."""
         if self.sw_brush:
@@ -85,10 +91,28 @@ class TinyCanvas:
         return (self.btn_up << 3) | (self.btn_down << 2) | (self.btn_right << 1) | self.btn_left
     
     def get_status(self):
-        """Emulates the status output: {color_mix[2:0], buttons[3:0]}."""
-        color_mix = self.get_color_mix()
-        buttons = self.get_buttons()
-        return (color_mix << 4) | buttons
+        """
+        Emulates the status output matching hardware pinout.
+        Status Byte [7:0]:
+          [7] = Up button
+          [6] = Down button
+          [5] = Left button
+          [4] = Right button
+          [3] = Brush/Eraser (1=Brush, 0=Eraser)
+          [2] = Red
+          [1] = Green
+          [0] = Blue
+        """
+        status = 0
+        status |= (1 if self.btn_up else 0) << 7
+        status |= (1 if self.btn_down else 0) << 6
+        status |= (1 if self.btn_left else 0) << 5
+        status |= (1 if self.btn_right else 0) << 4
+        status |= (1 if self.sw_brush else 0) << 3
+        status |= (1 if self.sw_red else 0) << 2
+        status |= (1 if self.sw_green else 0) << 1
+        status |= (1 if self.sw_blue else 0) << 0
+        return status
     
     def update_cursor(self, current_time):
         """Update cursor position based on button presses."""
@@ -96,11 +120,11 @@ class TinyCanvas:
             return
         
         moved = False
-        if self.btn_up and self.cursor_y > 0:
-            self.cursor_y -= 1
+        if self.btn_up and self.cursor_y < self.grid_size - 1:
+            self.cursor_y += 1  # UP increases Y (moves up on screen)
             moved = True
-        elif self.btn_down and self.cursor_y < self.grid_size - 1:
-            self.cursor_y += 1
+        elif self.btn_down and self.cursor_y > 0:
+            self.cursor_y -= 1  # DOWN decreases Y (moves down on screen)
             moved = True
         elif self.btn_left and self.cursor_x > 0:
             self.cursor_x -= 1
@@ -132,6 +156,15 @@ class TinyCanvas:
             self.i2c_receive_byte(y)
             self.i2c_receive_byte(status)
     
+    def get_canvas_y(self, user_y):
+        """
+        Convert user Y coordinate to canvas array index.
+        User coordinate system: (0,0) at bottom-left
+        Canvas array: canvas[y][x] where canvas[0] is displayed at bottom
+        The draw_grid function handles the Y-flip for display, so we don't flip here.
+        """
+        return user_y
+    
     def clear_canvas(self):
         """Clear the entire canvas."""
         self.canvas = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
@@ -151,8 +184,8 @@ class TinyCanvas:
         Simulate I2C byte reception.
         Accepts 3 bytes at a time:
         - Byte 1: X coordinate (0-255)
-        - Byte 2: Y coordinate (0-255)
-        - Byte 3: Status byte (contains color_mix in bits [6:4])
+        - Byte 2: Y coordinate (0-255) - in user coordinates (0=bottom)
+        - Byte 3: Status byte (RGB color in bits [2:0])
         """
         self.i2c_buffer.append(byte_val)
         
@@ -162,12 +195,13 @@ class TinyCanvas:
             self.i2c_y = self.i2c_buffer[1]
             self.i2c_status = self.i2c_buffer[2]
             
-            # Extract color from status byte (bits [6:4])
-            color_mix = (self.i2c_status >> 4) & 0b111
+            # Extract color from status byte (bits [2:0] = RGB)
+            color_mix = self.i2c_status & 0b111
             
-            # Paint at the specified position
+            # Paint at the specified position (convert Y to canvas coordinates)
             if 0 <= self.i2c_x < self.grid_size and 0 <= self.i2c_y < self.grid_size:
-                self.canvas[self.i2c_y][self.i2c_x] = color_mix
+                canvas_y = self.get_canvas_y(self.i2c_y)
+                self.canvas[canvas_y][self.i2c_x] = color_mix
             
             # Clear buffer for next command
             self.i2c_buffer = []
@@ -343,29 +377,141 @@ class CanvasEmulator:
                 self.recalculate_layout(event.w, event.h)
             
             if event.type == pygame.KEYDOWN:
-                # Toggle switches
-                if event.key == pygame.K_r:
-                    self.canvas.sw_red = not self.canvas.sw_red
-                elif event.key == pygame.K_g:
-                    self.canvas.sw_green = not self.canvas.sw_green
-                elif event.key == pygame.K_b:
-                    self.canvas.sw_blue = not self.canvas.sw_blue
-                elif event.key == pygame.K_SPACE:
-                    self.canvas.sw_brush = not self.canvas.sw_brush
-                elif event.key == pygame.K_c:
-                    self.canvas.clear_canvas()
-                    print("Canvas cleared! External I2C reset - ready for new commands.")
-                elif event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return False
+                # Check if in keyboard input mode
+                if self.canvas.keyboard_input_mode:
+                    if event.key == pygame.K_RETURN:
+                        # Process the command
+                        self.process_keyboard_command()
+                    elif event.key == pygame.K_ESCAPE:
+                        # Exit input mode
+                        self.canvas.keyboard_input_mode = False
+                        self.canvas.keyboard_input_buffer = ""
+                        self.canvas.keyboard_command_status = ""
+                    elif event.key == pygame.K_BACKSPACE:
+                        # Delete last character
+                        self.canvas.keyboard_input_buffer = self.canvas.keyboard_input_buffer[:-1]
+                    else:
+                        # Add character to buffer
+                        if event.unicode and (event.unicode.isprintable() or event.unicode == ' '):
+                            self.canvas.keyboard_input_buffer += event.unicode
+                else:
+                    # Normal mode - handle regular controls
+                    if event.key == pygame.K_i:
+                        # Enter keyboard input mode
+                        self.canvas.keyboard_input_mode = True
+                        self.canvas.keyboard_input_buffer = ""
+                        self.canvas.keyboard_command_status = "Type: 8-bit STATUS byte (e.g. 0x8C or 140)"
+                    elif event.key == pygame.K_r:
+                        self.canvas.sw_red = not self.canvas.sw_red
+                    elif event.key == pygame.K_g:
+                        self.canvas.sw_green = not self.canvas.sw_green
+                    elif event.key == pygame.K_b:
+                        self.canvas.sw_blue = not self.canvas.sw_blue
+                    elif event.key == pygame.K_SPACE:
+                        self.canvas.sw_brush = not self.canvas.sw_brush
+                    elif event.key == pygame.K_c:
+                        self.canvas.clear_canvas()
+                        print("Canvas cleared! External I2C reset - ready for new commands.")
+                    elif event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        return False
         
-        # Handle arrow keys (held down)
-        keys = pygame.key.get_pressed()
-        self.canvas.btn_up = keys[pygame.K_UP]
-        self.canvas.btn_down = keys[pygame.K_DOWN]
-        self.canvas.btn_left = keys[pygame.K_LEFT]
-        self.canvas.btn_right = keys[pygame.K_RIGHT]
+        # Handle arrow keys (held down) - only in normal mode
+        if not self.canvas.keyboard_input_mode:
+            keys = pygame.key.get_pressed()
+            self.canvas.btn_up = keys[pygame.K_UP]
+            self.canvas.btn_down = keys[pygame.K_DOWN]
+            self.canvas.btn_left = keys[pygame.K_LEFT]
+            self.canvas.btn_right = keys[pygame.K_RIGHT]
+        else:
+            # Disable buttons in input mode
+            self.canvas.btn_up = False
+            self.canvas.btn_down = False
+            self.canvas.btn_left = False
+            self.canvas.btn_right = False
         
         return True
+    
+    def process_keyboard_command(self):
+        """Parse and execute a keyboard command: single 8-bit status byte"""
+        try:
+            # Parse the input (single byte)
+            input_str = self.canvas.keyboard_input_buffer.strip()
+            
+            # Handle hex (0x0C) or decimal (12)
+            if input_str.startswith('0x') or input_str.startswith('0X'):
+                status = int(input_str, 16)
+            else:
+                status = int(input_str)
+            
+            # Validate range
+            if not (0 <= status <= 255):
+                self.canvas.keyboard_command_status = "❌ Error: Value must be 0-255 (0x00-0xFF)"
+                return
+            
+            # Decode the status byte
+            btn_up = (status >> 7) & 1
+            btn_down = (status >> 6) & 1
+            btn_left = (status >> 5) & 1
+            btn_right = (status >> 4) & 1
+            brush = (status >> 3) & 1
+            color = status & 0b111
+            
+            # Update canvas state
+            self.canvas.btn_up = bool(btn_up)
+            self.canvas.btn_down = bool(btn_down)
+            self.canvas.btn_left = bool(btn_left)
+            self.canvas.btn_right = bool(btn_right)
+            self.canvas.sw_brush = bool(brush)
+            self.canvas.sw_red = bool((color >> 2) & 1)
+            self.canvas.sw_green = bool((color >> 1) & 1)
+            self.canvas.sw_blue = bool(color & 1)
+            
+            # Move cursor based on button states
+            import pygame
+            current_time = pygame.time.get_ticks()
+            if btn_up and self.canvas.cursor_y < self.canvas.grid_size - 1:
+                self.canvas.cursor_y += 1
+            elif btn_down and self.canvas.cursor_y > 0:
+                self.canvas.cursor_y -= 1
+            elif btn_left and self.canvas.cursor_x > 0:
+                self.canvas.cursor_x -= 1
+            elif btn_right and self.canvas.cursor_x < self.canvas.grid_size - 1:
+                self.canvas.cursor_x += 1
+            
+            # Paint at current position
+            canvas_y = self.canvas.get_canvas_y(self.canvas.cursor_y)
+            self.canvas.canvas[canvas_y][self.canvas.cursor_x] = self.canvas.get_color_mix()
+            
+            # Build status message
+            color_names = {
+                0b000: "Black", 0b100: "Red", 0b010: "Green", 0b001: "Blue",
+                0b110: "Yellow", 0b101: "Magenta", 0b011: "Cyan", 0b111: "White",
+            }
+            color_name = color_names.get(color, "Unknown")
+            
+            buttons = []
+            if btn_up: buttons.append("Up")
+            if btn_down: buttons.append("Down")
+            if btn_left: buttons.append("Left")
+            if btn_right: buttons.append("Right")
+            btn_str = "+".join(buttons) if buttons else "None"
+            
+            mode = "Brush" if brush else "Eraser"
+            
+            self.canvas.keyboard_command_status = f"✅ 0x{status:02X}: {btn_str} | {mode} | {color_name} @ ({self.canvas.cursor_x},{self.canvas.cursor_y})"
+            
+            # Store last command
+            self.canvas.last_keyboard_command = self.canvas.keyboard_input_buffer
+            
+            # Clear buffer for next command
+            self.canvas.keyboard_input_buffer = ""
+            
+            print(f"Keyboard input: 0x{status:02X} [{btn_str}] [{mode}] [{color_name}] @ ({self.canvas.cursor_x},{self.canvas.cursor_y})")
+            
+        except ValueError as e:
+            self.canvas.keyboard_command_status = f"❌ Error: Invalid number format"
+        except Exception as e:
+            self.canvas.keyboard_command_status = f"❌ Error: {str(e)}"
     
     def draw_header(self):
         """Draw header with title and info."""
@@ -375,24 +521,33 @@ class CanvasEmulator:
         self.screen.blit(title, title_rect)
         
         # Controls hint
-        hint = self.font_small.render("Arrow Keys: Move | R/G/B: Colors | Space: Brush/Eraser | C: Clear | ESC: Quit", True, (150, 150, 150))
+        if not self.canvas.keyboard_input_mode:
+            hint = self.font_small.render("Arrow Keys: Move | R/G/B: Colors | I: Input Mode | Space: Brush/Eraser | C: Clear | ESC: Quit", True, (150, 150, 150))
+        else:
+            hint = self.font_small.render("KEYBOARD INPUT MODE - Type: 8-bit STATUS (0x00-0xFF) | Enter: Apply | ESC: Cancel", True, (255, 200, 100))
         hint_rect = hint.get_rect(center=(self.window_width // 2, 45))
         self.screen.blit(hint, hint_rect)
     
     def draw_grid(self):
         """Draw the 256x256 canvas grid."""
         # Draw cells (no grid lines for 256x256 as it would be too dense)
-        for y in range(self.grid_size):
+        # Note: Canvas array is [y][x] with [0][0] at top-left
+        # We display it so visual (0,0) is at bottom-left
+        for canvas_y in range(self.grid_size):
             for x in range(self.grid_size):
+                # Calculate screen Y position (flip for display)
+                # canvas_y=0 should appear at bottom of screen
+                screen_y = self.grid_size - 1 - canvas_y
+                
                 rect = pygame.Rect(
                     self.canvas_offset_x + x * self.cell_size,
-                    self.canvas_offset_y + y * self.cell_size,
+                    self.canvas_offset_y + screen_y * self.cell_size,
                     self.cell_size,
                     self.cell_size
                 )
                 
                 # Fill with cell color
-                color_value = self.canvas.canvas[y][x]
+                color_value = self.canvas.canvas[canvas_y][x]
                 color = COLORS[color_value]
                 pygame.draw.rect(self.screen, color, rect)
         
@@ -406,10 +561,16 @@ class CanvasEmulator:
         pygame.draw.rect(self.screen, (100, 100, 100), border_rect, 2)
         
         # Draw cursor (centered on the pixel being painted)
+        # Cursor position is in user coordinates (0,0 = bottom-left)
         cursor_size = max(self.cell_size * 4, 8)  # At least 8 pixels
+        
+        # Convert cursor Y to screen Y (flip it)
+        cursor_screen_y = self.grid_size - 1 - self.canvas.cursor_y
+        
         # Calculate center of the current pixel
         pixel_center_x = self.canvas_offset_x + self.canvas.cursor_x * self.cell_size + self.cell_size // 2
-        pixel_center_y = self.canvas_offset_y + self.canvas.cursor_y * self.cell_size + self.cell_size // 2
+        pixel_center_y = self.canvas_offset_y + cursor_screen_y * self.cell_size + self.cell_size // 2
+        
         # Draw cursor centered on that pixel
         cursor_rect = pygame.Rect(
             pixel_center_x - cursor_size // 2,
@@ -562,14 +723,19 @@ class CanvasEmulator:
             self.screen.blit(byte3_render, (sidebar_x, y_offset))
             y_offset += 20
             
-            # Show decoded color from status byte
-            last_color = (self.canvas.i2c_status >> 4) & 0b111
+            # Show decoded status byte fields
+            status_decode = self.font_small.render(f"  [7:4]={self.canvas.i2c_status >> 4:04b} [3]={(self.canvas.i2c_status >> 3) & 1}", True, (180, 180, 180))
+            self.screen.blit(status_decode, (sidebar_x, y_offset))
+            y_offset += 18
+            
+            # Show decoded color from status byte (bits [2:0])
+            last_color = self.canvas.i2c_status & 0b111
             color_names = {
                 0b000: "Black", 0b100: "Red", 0b010: "Green", 0b001: "Blue",
                 0b110: "Yellow", 0b101: "Magenta", 0b011: "Cyan", 0b111: "White",
             }
             color_name = color_names.get(last_color, "Unknown")
-            color_info_text = self.font_small.render(f"  Color: {color_name} (0b{last_color:03b})", True, (180, 180, 180))
+            color_info_text = self.font_small.render(f"  RGB[2:0]: {color_name} (0b{last_color:03b})", True, (180, 180, 180))
             self.screen.blit(color_info_text, (sidebar_x, y_offset))
             y_offset += 25
         
@@ -579,6 +745,7 @@ class CanvasEmulator:
             ("Controls:", self.text_color),
             ("Arrows: Move cursor", (180, 180, 180)),
             ("R/G/B: Toggle color", (180, 180, 180)),
+            ("I: Input mode", (180, 180, 180)),
             ("Space: Brush/Eraser", (180, 180, 180)),
             ("C: Clear canvas", (180, 180, 180)),
             ("ESC/Q: Quit", (180, 180, 180)),
@@ -606,6 +773,45 @@ class CanvasEmulator:
         state_render = self.font_small.render(state_text, True, self.text_color)
         self.screen.blit(state_render, (switch_x + 80, y + 2))
     
+    def draw_keyboard_input(self):
+        """Draw the keyboard input box when in input mode."""
+        if not self.canvas.keyboard_input_mode and not self.canvas.keyboard_command_status:
+            return
+        
+        # Draw input box at bottom of screen
+        box_height = 100
+        box_y = self.window_height - box_height - 10
+        box_rect = pygame.Rect(10, box_y, self.window_width - 20, box_height)
+        
+        # Background
+        pygame.draw.rect(self.screen, (40, 40, 60), box_rect)
+        pygame.draw.rect(self.screen, (100, 200, 255) if self.canvas.keyboard_input_mode else (100, 100, 100), box_rect, 3)
+        
+        y_offset = box_y + 10
+        
+        if self.canvas.keyboard_input_mode:
+            # Title
+            title = self.font_medium.render("Keyboard Input Mode", True, (100, 200, 255))
+            self.screen.blit(title, (20, y_offset))
+            y_offset += 30
+            
+            # Input prompt
+            prompt = self.font_small.render("Enter command:", True, self.text_color)
+            self.screen.blit(prompt, (20, y_offset))
+            y_offset += 22
+            
+            # Input buffer with cursor
+            input_text = self.canvas.keyboard_input_buffer + "█"
+            input_render = self.font_medium.render(input_text, True, (255, 255, 0))
+            self.screen.blit(input_render, (20, y_offset))
+        
+        # Status message (shown in both modes if present)
+        if self.canvas.keyboard_command_status:
+            status_y = box_y + box_height - 30
+            status_color = (100, 255, 100) if "✅" in self.canvas.keyboard_command_status else (255, 100, 100)
+            status_render = self.font_small.render(self.canvas.keyboard_command_status, True, status_color)
+            self.screen.blit(status_render, (20, status_y))
+    
     def run(self):
         """Main emulator loop."""
         running = True
@@ -616,8 +822,8 @@ class CanvasEmulator:
         print("Canvas: 256x256 pixels")
         print(f"Window: {self.window_width}x{self.window_height} @ {self.cell_size}px per cell")
         print("Window: RESIZABLE - drag corners to resize")
-        print("Coordinate System: (0,0) = top-left, (255,255) = bottom-right")
-        print("Starting Position: (128, 128) - center of canvas")
+        print("Coordinate System: (0,0) = BOTTOM-LEFT, (255,255) = TOP-RIGHT")
+        print("Starting Position: (0, 0) - bottom-left corner")
         print("=" * 60)
         print("\nI2C COMMUNICATION (AUTOMATIC):")
         print()
@@ -625,7 +831,10 @@ class CanvasEmulator:
         print("  • I2C automatically sends 3 bytes when state changes")
         print("  • Byte 1: X coordinate (0-255)")
         print("  • Byte 2: Y coordinate (0-255)")
-        print("  • Byte 3: Status (color in bits [6:4])")
+        print("  • Byte 3: Status byte [7:0]")
+        print("    [7:4] = Buttons (Up/Down/Left/Right)")
+        print("    [3]   = Brush/Eraser (1=Brush, 0=Eraser)")
+        print("    [2:0] = RGB Color (Red/Green/Blue)")
         print()
         print("When you move the cursor or change colors:")
         print("  1. Hardware detects state change")
@@ -646,9 +855,28 @@ class CanvasEmulator:
         print("Controls:")
         print("  Arrow Keys: Move cursor (triggers I2C automatically)")
         print("  R/G/B: Toggle Red/Green/Blue (triggers I2C)")
+        print("  I: Keyboard Input Mode (type 8-bit status byte)")
         print("  Space: Toggle Brush/Eraser")
         print("  C: Clear canvas")
         print("  ESC/Q: Quit")
+        print("=" * 60)
+        print("\nKEYBOARD INPUT MODE:")
+        print("  Press 'I' to enter input mode")
+        print("  Type: 8-bit STATUS byte (0x00-0xFF or 0-255)")
+        print("  Press Enter to apply, ESC to cancel")
+        print()
+        print("  Status Byte Format:")
+        print("    Bit [7]:   Up button")
+        print("    Bit [6]:   Down button")
+        print("    Bit [5]:   Left button")
+        print("    Bit [4]:   Right button")
+        print("    Bit [3]:   Brush/Eraser (1=Brush)")
+        print("    Bits [2:0]: RGB Color")
+        print()
+        print("  Examples:")
+        print("    0x8C (10001100) = Up + Brush + Red")
+        print("    0x4A (01001010) = Down + Brush + Green")
+        print("    0x0F (00001111) = Brush + White (no movement)")
         print("=" * 60)
         
         while running:
@@ -670,6 +898,7 @@ class CanvasEmulator:
             self.draw_header()
             self.draw_grid()
             self.draw_sidebar()
+            self.draw_keyboard_input()
             
             # Update display
             pygame.display.flip()

@@ -54,7 +54,7 @@ def draw_smiley():
     # Face outline (yellow)
     center_x, center_y = 128, 128
     radius = 20
-    yellow = 0x60  # RGB: 110
+    yellow = 0x0E  # RGB: 110 (Brush + Yellow)
     
     # Simple circle approximation
     for angle in range(0, 360, 5):
@@ -65,7 +65,7 @@ def draw_smiley():
         time.sleep(0.01)
     
     # Left eye (blue)
-    blue = 0x10
+    blue = 0x09  # RGB: 001 (Brush + Blue)
     for i in range(3):
         for j in range(3):
             send_command(center_x - 8 + i, center_y - 6 + j, blue)
@@ -76,7 +76,7 @@ def draw_smiley():
             send_command(center_x + 6 + i, center_y - 6 + j, blue)
     
     # Smile (red)
-    red = 0x40
+    red = 0x0C  # RGB: 100 (Brush + Red)
     for x in range(-10, 11):
         y = int(abs(x) * 0.3)
         send_command(center_x + x, center_y + 5 + y, red)
@@ -87,12 +87,12 @@ def draw_rainbow():
     print("Drawing rainbow...")
     
     colors = [
-        (0x40, "Red"),
-        (0x60, "Yellow"),
-        (0x20, "Green"),
-        (0x30, "Cyan"),
-        (0x10, "Blue"),
-        (0x50, "Magenta"),
+        (0x0C, "Red"),      # Brush + Red
+        (0x0E, "Yellow"),   # Brush + Yellow
+        (0x0A, "Green"),    # Brush + Green
+        (0x0B, "Cyan"),     # Brush + Cyan
+        (0x09, "Blue"),     # Brush + Blue
+        (0x0D, "Magenta"),  # Brush + Magenta
     ]
     
     stripe_width = 10
@@ -130,12 +130,12 @@ def main():
         draw_smiley()
     elif choice == "3":
         # Draw a colored box
-        draw_box(90, 90, 40, 40, 0x50)  # Magenta box
+        draw_box(90, 90, 40, 40, 0x0D)  # Magenta box (Brush + Magenta)
         print("Drew magenta box")
     elif choice == "4":
         # Draw some lines
-        draw_horizontal_line(80, 100, 50, 0x40)  # Red line
-        draw_vertical_line(100, 80, 50, 0x20)    # Green line
+        draw_horizontal_line(80, 100, 50, 0x0C)  # Red line (Brush + Red)
+        draw_vertical_line(100, 80, 50, 0x0A)    # Green line (Brush + Green)
         print("Drew red horizontal and green vertical lines")
     else:
         print("Invalid choice")

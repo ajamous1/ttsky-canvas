@@ -49,13 +49,13 @@ class CanvasTestbench:
         """Test: Write individual pixels."""
         print("TEST 1: Individual pixel writes")
         colors = [
-            (0x40, "Red"),
-            (0x20, "Green"),
-            (0x10, "Blue"),
-            (0x60, "Yellow"),
-            (0x50, "Magenta"),
-            (0x30, "Cyan"),
-            (0x70, "White"),
+            (0x0C, "Red"),      # Brush + Red
+            (0x0A, "Green"),    # Brush + Green
+            (0x09, "Blue"),     # Brush + Blue
+            (0x0E, "Yellow"),   # Brush + Yellow
+            (0x0D, "Magenta"),  # Brush + Magenta
+            (0x0B, "Cyan"),     # Brush + Cyan
+            (0x0F, "White"),    # Brush + White
         ]
         
         for i, (color, name) in enumerate(colors):
@@ -68,7 +68,7 @@ class CanvasTestbench:
         print("\nTEST 2: Horizontal line scan (Red)")
         y = 110
         for x in range(90, 120):
-            self.send_i2c(x, y, 0x40, delay=0.02)  # Red pixels
+            self.send_i2c(x, y, 0x0C, delay=0.02)  # Red pixels (Brush + Red)
             if x % 10 == 0:
                 print(f"  Scanning x={x}")
     
@@ -77,7 +77,7 @@ class CanvasTestbench:
         print("\nTEST 3: Vertical line scan (Green)")
         x = 130
         for y in range(90, 120):
-            self.send_i2c(x, y, 0x20, delay=0.02)  # Green pixels
+            self.send_i2c(x, y, 0x0A, delay=0.02)  # Green pixels (Brush + Green)
             if y % 10 == 0:
                 print(f"  Scanning y={y}")
     
@@ -89,7 +89,7 @@ class CanvasTestbench:
         
         for y in range(start_y, start_y + height):
             for x in range(start_x, start_x + width):
-                self.send_i2c(x, y, 0x10, delay=0.01)  # Blue pixels
+                self.send_i2c(x, y, 0x09, delay=0.01)  # Blue pixels (Brush + Blue)
             print(f"  Filled row y={y}")
     
     def test_pattern_animation(self):
@@ -102,16 +102,16 @@ class CanvasTestbench:
                 x = 160 + i
                 y = 100 + offset + i
                 if y < 256:
-                    # Alternate colors
-                    color = 0x60 if (i + offset) % 2 == 0 else 0x50
+                    # Alternate colors (Yellow and Magenta)
+                    color = 0x0E if (i + offset) % 2 == 0 else 0x0D
                     self.send_i2c(x, y, color, delay=0.005)
             print(f"  Sweep offset={offset}")
     
     def test_rapid_updates(self):
         """Test: Rapid position updates (simulates cursor movement)."""
-        print("\nTEST 6: Rapid cursor simulation")
+        print("\nTEST 6: Rapid cursor simulation (circle at center)")
         
-        # Move cursor in a circle
+        # Move cursor in a circle at center of canvas
         import math
         center_x, center_y = 128, 128
         radius = 15
@@ -120,9 +120,9 @@ class CanvasTestbench:
             rad = math.radians(angle)
             x = int(center_x + radius * math.cos(rad))
             y = int(center_y + radius * math.sin(rad))
-            self.send_i2c(x, y, 0x70, delay=0.01)  # White trail
+            self.send_i2c(x, y, 0x0F, delay=0.01)  # White trail (Brush + White)
             if angle % 45 == 0:
-                print(f"  Cursor at angle={angle}°")
+                print(f"  Cursor at angle={angle}°, pos=({x},{y})")
     
     def run_all_tests(self):
         """Run all testbench tests."""
